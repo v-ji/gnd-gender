@@ -18,7 +18,9 @@ def check_gender_concepts() -> set[str]:
         "https://d-nb.info/standards/vocab/gnd/gender#notKnown",
     }
 
-    concepts = set(doc.xpath("//skos:Concept/@rdf:about", namespaces=doc.nsmap))
+    # Ensure there are no `None` keys
+    namespaces = {k: v for k, v in doc.nsmap.items() if k is not None}
+    concepts = set(doc.xpath("//skos:Concept/@rdf:about", namespaces=namespaces))
     return concepts - concepts_expected
 
 
