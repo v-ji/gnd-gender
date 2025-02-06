@@ -1,8 +1,13 @@
 name: Check and post to Bluesky
 on:
   schedule:
-    - cron: "55 10 * * *"
-  workflow_dispatch:
+    - cron: "55 * * * *"
+  workflow_dispatch: # Allow manual trigger
+
+env:
+  TZ: "Europe/Berlin"
+  HOT_HOUR: "11"
+
 jobs:
   post-job:
     name: Main Job
@@ -21,7 +26,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Run script
-        run: python gnd_gender.py
+        run: |
+          if [ "$(date +%H)" = $HOT_HOUR ]; then
+            # Post any outcome once a day
+            python gnd_gender.py --post any
+          else
+            # Post positive outcome only at all other times
+            python gnd_gender.py --post positive
+          fi
 
   keepalive-job:
     name: Keepalive Workflow

@@ -14,16 +14,29 @@ This bot runs daily and checks for any additions to this vocabulary.
 - Posts result to Bluesky
 - Runs daily via GitHub Actions
 
-## Setup
-
-1. Set repository secrets:
-   - `ATPROTO_HANDLE`: Your Bluesky handle
-   - `ATPROTO_PASSWORD`: Your Bluesky app password
-
-## Running locally
+## Installation
 
 ```bash
-export ATPROTO_HANDLE="your.handle"
-export ATPROTO_PASSWORD="your-app-password"
-python gnd_gender.py
+pip install -r requirements.txt
+```
+
+To enable posting, set the following environment variables:
+
+- `ATPROTO_HANDLE`: Bluesky handle
+- `ATPROTO_PASSWORD`: Bluesky app password
+
+## Usage
+
+```
+usage: gnd_gender.py [-h] --post {any,positive,negative} [--dry-run]
+
+Check GND gender vocabulary and post to Bluesky
+
+options:
+  -h, --help            show this help message and exit
+  --post {any,positive,negative}
+                        Specify what outcome to post: 'positive' if new
+                        concepts are found, 'negative' if no new concepts are
+                        found, or 'any' for both
+  --dry-run             Do not authenticate with ATProto and do not post
 ```
