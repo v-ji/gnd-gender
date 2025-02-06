@@ -1,5 +1,8 @@
 import argparse
+import json
+import random
 import sys
+from codecs import decode
 from os import environ
 
 import requests
@@ -43,6 +46,34 @@ def check_gender_concepts() -> set[str]:
     return concepts - concepts_expected
 
 
+def get_random_phrase(forbid=set()) -> str:
+    with open("phrases.json", "r", encoding="utf-8") as f:
+        phrases = json.loads(decode(f.read(), "\u0072\u006f\u0074\u0031\u0033"))
+
+    # Pick a phrase pool based on weights in the JSON keys
+    weights = phrases.keys()
+    pool = random.choices(
+        list(phrases.values()),
+        weights=[int(weight) for weight in weights],
+    )[0]
+
+    # Filter out forbidden phrases from the pool
+    pool_filtered = [phrase for phrase in pool if phrase not in forbid]
+    # Revert to original pool if filtered pool is empty
+    pool_filtered = pool_filtered or pool
+    phrase = random.choice(pool_filtered)
+    return phrase
+
+
+def print_and_post(text: str | TextBuilder, client: Client | None):
+    # Get string representation for TextBuilder
+    text_str = text if type(text) is not TextBuilder else text.build_text()
+
+    print(f"{'Posting:' if client else 'Dry run, would post:'} '{text_str}'")
+    if client:
+        client.send_post(text, langs=["en"])
+
+
 def main():
     parser = create_parser()
     args = parser.parse_args()
@@ -58,6 +89,7 @@ def main():
         post_negative = True
 
     client = None
+    recent_posts = set()
     if not args.dry_run:
         print("Performing ATProto login...")
         client = Client()
@@ -73,6 +105,16 @@ def main():
             sys.exit(1)
         profile = client.login(atproto_handle, atproto_password)
         print(f"Logged in as: '${profile.display_name}'")
+
+        # Get recent posts so we can exclude them from the random phrase pool
+        recent_limit = 3
+        profile_feed = client.get_author_feed(
+            atproto_handle, filter="posts_no_replies", limit=recent_limit
+        )
+        recent_posts = set(
+            map(lambda x: x.post.record.text, profile_feed.feed)  # type: ignore / Types are incomplete
+        )
+
     else:
         print("Dry run, skipping ATProto login.")
 
@@ -83,8 +125,10 @@ def main():
     if not found_concepts:
         print("Found no new concepts.")
         if post_negative:
-            print_and_post("No.", client)
+            phrase = get_random_phrase(forbid=recent_posts)
+            print_and_post(phrase, client)
     else:
+        # IT’S HAPPENING
         print("Found unexpected concepts!")
         print("\n".join(new_concepts))
         if post_positive:
@@ -92,15 +136,6 @@ def main():
             print_and_post(text, client)
 
         sys.exit(99)  # Exit with error code so GitHub Actions sends a notification
-
-
-def print_and_post(text: str | TextBuilder, client: Client | None):
-    # Get string representation for TextBuilder
-    text_str = text if type(text) is not TextBuilder else text.build_text()
-
-    print(f"{'Posting:' if client else 'Dry run, would post:'} '{text_str}'")
-    if client:
-        client.send_post(text, langs=["en"])
 
 
 if __name__ == "__main__":
