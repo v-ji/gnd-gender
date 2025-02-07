@@ -21,7 +21,7 @@ def create_parser():
         "--post",
         choices=["any", "positive", "negative"],
         help=(
-            "Specify what outcome to post: 'positive' if new concepts are found, 'negative' if no new concepts are found, or 'any' for both"
+            "Specify when to post: Only on positive outcome (changes detected), only on negative outcome (no changes detected), or on any outcome"
         ),
         required=True,
     )

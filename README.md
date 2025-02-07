@@ -35,8 +35,12 @@ Check GND gender vocabulary and post to Bluesky
 options:
   -h, --help            show this help message and exit
   --post {any,positive,negative}
-                        Specify what outcome to post: 'positive' if new
-                        concepts are found, 'negative' if no new concepts are
-                        found, or 'any' for both
+                        Specify when to post: Only on positive outcome
+                        (changes detected), only on negative outcome (no
+                        changes detected), or on any outcome
   --dry-run             Do not authenticate with ATProto and do not post
 ```
+
+The `--post` option allows the bot to check for changes every hour without flooding the feed with “No.” posts. It posts any updates once a day with `--post any` and only positive updates hourly with `--post positive`.
+
+The script exits with code 0 if no changes are detected, and with code 99 if new concepts are found.
