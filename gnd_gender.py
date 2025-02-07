@@ -3,7 +3,7 @@ import json
 import random
 import sys
 from codecs import decode
-from os import environ
+from os import EX_IOERR, environ
 from typing import Optional, Set, TypedDict
 
 import requests
@@ -11,7 +11,8 @@ from atproto import Client
 from atproto_client.utils import TextBuilder
 from lxml import etree
 
-gender_vocab_url = "https://d-nb.info/standards/vocab/gnd/gender"
+GENDER_VOCAB_URL = "https://d-nb.info/standards/vocab/gnd/gender"
+EXIT_CODE_CHANGES_DETECTED = 99
 
 
 def create_parser():
@@ -51,8 +52,18 @@ class GenderConceptsResult(TypedDict):
 
 def check_gender_concepts() -> GenderConceptsResult:
     session = create_session()
-    res = session.get(gender_vocab_url, headers={"Accept": "application/rdf+xml"})
-    doc = etree.fromstring(res.content)
+
+    try:
+        res = session.get(GENDER_VOCAB_URL, headers={"Accept": "application/rdf+xml"})
+        res.raise_for_status()  # Raise an exception for HTTP errors
+        doc = etree.fromstring(res.content)
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to fetch GND gender vocabulary: {e}")
+        sys.exit(1)
+    except etree.XMLSyntaxError as e:
+        print(f"Failed to parse XML content: {e}")
+        sys.exit(1)
+
     concepts_expected = {
         "https://d-nb.info/standards/vocab/gnd/gender#female",
         "https://d-nb.info/standards/vocab/gnd/gender#male",
@@ -84,9 +95,8 @@ def get_random_phrase(forbid=set()) -> str:
 
     # Filter out forbidden phrases from the pool
     pool_filtered = [phrase for phrase in pool if phrase not in forbid]
-    # Revert to original pool if filtered pool is empty
-    pool_filtered = pool_filtered or pool
-    phrase = random.choice(pool_filtered)
+    # Draw from filtered pool or original pool if filtered pool is empty
+    phrase = random.choice(pool_filtered or pool)
     return phrase
 
 
@@ -114,7 +124,7 @@ def main():
         post_negative = True
 
     client = None
-    recent_posts = set()
+    recent_posts: Set[str] = set()
     if not args.dry_run:
         print("Performing ATProto login...")
         client = Client()
@@ -123,11 +133,13 @@ def main():
             environ.get("ATPROTO_HANDLE"),
             environ.get("ATPROTO_PASSWORD"),
         )
-        if not atproto_handle or not atproto_password:
-            print(
-                "Please set the environment variables ATPROTO_HANDLE and ATPROTO_PASSWORD. Exiting."
-            )
+        if not atproto_handle:
+            print("Environment variable ATPROTO_HANDLE is not set. Exiting.")
             sys.exit(1)
+        if not atproto_password:
+            print("Environment variable ATPROTO_PASSWORD is not set. Exiting.")
+            sys.exit(1)
+
         profile = client.login(atproto_handle, atproto_password)
         print(f"Logged in as: '{profile.display_name}'")
 
@@ -169,11 +181,12 @@ def main():
                 print(indent + concept)
 
         if post_positive:
-            url = gender_concepts["version_iri"] or gender_vocab_url
+            url = gender_concepts["version_iri"] or GENDER_VOCAB_URL
             text = f"Maybe? {url}"
             print_and_post(text, client)
 
-        sys.exit(99)  # Exit with error code so GitHub Actions sends a notification
+        # Exit with error code so GitHub Actions sends a notification
+        sys.exit(EXIT_CODE_CHANGES_DETECTED)
 
 
 if __name__ == "__main__":
