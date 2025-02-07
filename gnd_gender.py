@@ -33,8 +33,18 @@ def create_parser():
     return parser
 
 
+def create_session() -> requests.Session:
+    # Set a user agent because we’re a good bot
+    version = environ.get("GITHUB_SHA", "dev")[:7]  # Shorten commit hash
+    user_agent = f"gnd-gender/{version} (bot; https://github.com/v-ji/gnd-gender) {requests.utils.default_user_agent()}"
+    session = requests.Session()
+    session.headers.update({"User-Agent": user_agent})
+    return session
+
+
 def check_gender_concepts() -> set[str]:
-    res = requests.get(gender_vocab_url + ".rdf")
+    session = create_session()
+    res = session.get(gender_vocab_url + ".rdf")
     doc = etree.fromstring(res.content)
     concepts_expected = {
         "https://d-nb.info/standards/vocab/gnd/gender#female",
