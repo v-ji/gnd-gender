@@ -4,9 +4,10 @@ import random
 import sys
 from codecs import decode
 from os import environ
+from typing import Optional, Set, TypedDict
 
 import requests
-from atproto import Client, client_utils
+from atproto import Client
 from atproto_client.utils import TextBuilder
 from lxml import etree
 
@@ -42,7 +43,13 @@ def create_session() -> requests.Session:
     return session
 
 
-def check_gender_concepts() -> set[str]:
+class GenderConceptsResult(TypedDict):
+    version_iri: Optional[str]  # The stable address of the vocabulary
+    added_concepts: Set[str]
+    removed_concepts: Set[str]
+
+
+def check_gender_concepts() -> GenderConceptsResult:
     session = create_session()
     res = session.get(gender_vocab_url, headers={"Accept": "application/rdf+xml"})
     doc = etree.fromstring(res.content)
@@ -53,7 +60,15 @@ def check_gender_concepts() -> set[str]:
     }
     namespaces = {k: v for k, v in doc.nsmap.items() if k is not None}
     concepts = set(doc.xpath("//skos:Concept/@rdf:about", namespaces=namespaces))
-    return concepts - concepts_expected
+    version_iri = doc.xpath(
+        "//skos:ConceptScheme//owl:versionIRI/@rdf:resource", namespaces=namespaces
+    )
+
+    return {
+        "version_iri": version_iri[0] if version_iri else None,
+        "added_concepts": concepts - concepts_expected,
+        "removed_concepts": concepts_expected - concepts,
+    }
 
 
 def get_random_phrase(forbid=set()) -> str:
@@ -129,20 +144,33 @@ def main():
         print("Dry run, skipping ATProto login.")
 
     print("Fetching GND gender information...")
-    new_concepts = check_gender_concepts()
-    found_concepts = bool(new_concepts)
+    gender_concepts = check_gender_concepts()
+    (added_concepts, removed_concepts) = (
+        gender_concepts["added_concepts"],
+        gender_concepts["removed_concepts"],
+    )
+    has_changes = bool(added_concepts) or bool(removed_concepts)
 
-    if not found_concepts:
-        print("Found no new concepts.")
+    if not has_changes:
+        print("Found no concept changes.")
         if post_negative:
             phrase = get_random_phrase(forbid=recent_posts)
             print_and_post(phrase, client)
     else:
         # IT’S HAPPENING
-        print("Found unexpected concepts!")
-        print("\n".join(new_concepts))
+        indent = 4 * " "
+        if added_concepts:
+            print("Found unexpected concepts!")
+            for concept in added_concepts:
+                print(indent + concept)
+        if removed_concepts:
+            print("Missing expected concepts!")
+            for concept in removed_concepts:
+                print(indent + concept)
+
         if post_positive:
-            text = client_utils.TextBuilder().link("Maybe?", gender_vocab_url)
+            url = gender_concepts["version_iri"] or gender_vocab_url
+            text = f"Maybe? {url}"
             print_and_post(text, client)
 
         sys.exit(99)  # Exit with error code so GitHub Actions sends a notification
