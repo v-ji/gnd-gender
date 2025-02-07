@@ -44,7 +44,7 @@ def create_session() -> requests.Session:
 
 def check_gender_concepts() -> set[str]:
     session = create_session()
-    res = session.get(gender_vocab_url + ".rdf")
+    res = session.get(gender_vocab_url, headers={"Accept": "application/rdf+xml"})
     doc = etree.fromstring(res.content)
     concepts_expected = {
         "https://d-nb.info/standards/vocab/gnd/gender#female",
