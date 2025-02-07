@@ -104,7 +104,7 @@ def main():
             )
             sys.exit(1)
         profile = client.login(atproto_handle, atproto_password)
-        print(f"Logged in as: '${profile.display_name}'")
+        print(f"Logged in as: '{profile.display_name}'")
 
         # Get recent posts so we can exclude them from the random phrase pool
         recent_limit = 3
