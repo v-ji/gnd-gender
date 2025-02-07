@@ -1,9 +1,10 @@
 import argparse
 import json
+import logging
 import random
 import sys
 from codecs import decode
-from os import EX_IOERR, environ
+from os import environ
 from typing import Optional, Set, TypedDict
 
 import requests
@@ -11,8 +12,13 @@ from atproto import Client
 from atproto_client.utils import TextBuilder
 from lxml import etree
 
+# Constants
 GENDER_VOCAB_URL = "https://d-nb.info/standards/vocab/gnd/gender"
 EXIT_CODE_CHANGES_DETECTED = 99
+
+logging.basicConfig(format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def create_parser():
@@ -58,10 +64,10 @@ def check_gender_concepts() -> GenderConceptsResult:
         res.raise_for_status()  # Raise an exception for HTTP errors
         doc = etree.fromstring(res.content)
     except requests.exceptions.RequestException as e:
-        print(f"Failed to fetch GND gender vocabulary: {e}")
+        logger.error(f"Failed to fetch GND gender vocabulary: {e}")
         sys.exit(1)
     except etree.XMLSyntaxError as e:
-        print(f"Failed to parse XML content: {e}")
+        logger.error(f"Failed to parse XML content: {e}")
         sys.exit(1)
 
     concepts_expected = {
@@ -104,7 +110,7 @@ def print_and_post(text: str | TextBuilder, client: Client | None):
     # Get string representation for TextBuilder
     text_str = text if type(text) is not TextBuilder else text.build_text()
 
-    print(f"{'Posting:' if client else 'Dry run, would post:'} '{text_str}'")
+    logger.info(f"{'Posting:' if client else 'Dry run, would post:'} '{text_str}'")
     if client:
         client.send_post(text, langs=["en"])
 
@@ -126,7 +132,7 @@ def main():
     client = None
     recent_posts: Set[str] = set()
     if not args.dry_run:
-        print("Performing ATProto login...")
+        logger.info("Performing ATProto login...")
         client = Client()
         # Check environment variables for login credentials
         atproto_handle, atproto_password = (
@@ -134,14 +140,14 @@ def main():
             environ.get("ATPROTO_PASSWORD"),
         )
         if not atproto_handle:
-            print("Environment variable ATPROTO_HANDLE is not set. Exiting.")
+            logger.error("Environment variable ATPROTO_HANDLE is not set. Exiting.")
             sys.exit(1)
         if not atproto_password:
-            print("Environment variable ATPROTO_PASSWORD is not set. Exiting.")
+            logger.error("Environment variable ATPROTO_PASSWORD is not set. Exiting.")
             sys.exit(1)
 
         profile = client.login(atproto_handle, atproto_password)
-        print(f"Logged in as: '{profile.display_name}'")
+        logger.info(f"Logged in as: '{profile.display_name}'")
 
         # Get recent posts so we can exclude them from the random phrase pool
         recent_limit = 3
@@ -153,9 +159,9 @@ def main():
         )
 
     else:
-        print("Dry run, skipping ATProto login.")
+        logger.info("Dry run, skipping ATProto login.")
 
-    print("Fetching GND gender information...")
+    logger.info("Fetching GND gender information...")
     gender_concepts = check_gender_concepts()
     (added_concepts, removed_concepts) = (
         gender_concepts["added_concepts"],
@@ -164,21 +170,20 @@ def main():
     has_changes = bool(added_concepts) or bool(removed_concepts)
 
     if not has_changes:
-        print("Found no concept changes.")
+        logger.info("Found no concept changes.")
         if post_negative:
             phrase = get_random_phrase(forbid=recent_posts)
             print_and_post(phrase, client)
     else:
         # IT’S HAPPENING
-        indent = 4 * " "
         if added_concepts:
-            print("Found unexpected concepts!")
+            logger.info("Found unexpected concepts!")
             for concept in added_concepts:
-                print(indent + concept)
+                logger.info(f"    - {concept}")
         if removed_concepts:
-            print("Missing expected concepts!")
+            logger.info("Missing expected concepts!")
             for concept in removed_concepts:
-                print(indent + concept)
+                logger.info(f"    - {concept}")
 
         if post_positive:
             url = gender_concepts["version_iri"] or GENDER_VOCAB_URL
