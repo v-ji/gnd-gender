@@ -1,7 +1,7 @@
 name: Check and post to Bluesky
 on:
   schedule:
-    - cron: "55 * * * *"
+    - cron: "20 * * * *"
   workflow_dispatch: # Allow manual trigger
 
 env:
