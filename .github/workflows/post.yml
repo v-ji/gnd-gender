@@ -28,7 +28,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Run script
+        id: run-script
         run: |
+          trap 'echo "exitCode=$?" | tee -a $GITHUB_OUTPUT' EXIT
           if [ "$(date +%H)" = $HOT_HOUR ]; then
             # Post any outcome once a day
             python gnd_gender.py --post any
@@ -36,8 +38,8 @@ jobs:
             # Post positive outcome only at all other times
             python gnd_gender.py --post positive
           fi
-      - name: Disable workflow on error or if detection is tripped
-        if: failure()
+      - name: Disable workflow on exit code 99 (changes detected)
+        if: steps.run-script.outputs.exitCode == '99'
         run: gh workflow disable "$GITHUB_WORKFLOW"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
