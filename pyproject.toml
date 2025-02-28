@@ -1,0 +1,18 @@
+[project]
+name = "gnd-gender"
+version = "0.1.0"
+dependencies = [
+    "atproto",
+    "lxml",
+    "requests"
+]
+
+[project.scripts]
+gnd-gender = "gnd_gender.main:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["gnd_gender"]
