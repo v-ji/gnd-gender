@@ -19,24 +19,36 @@ jobs:
       actions: write # Required to disable the workflow
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: nixbuild/nix-quick-install-action@v30
+      - uses: nix-community/cache-nix-action@v6
         with:
-          python-version: "3.12"
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          # restore and save a cache using this key
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
+          # if there's no cache hit, restore a cache by this prefix
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          # collect garbage until Nix store size (in bytes) is at most this number before trying to save a new cache
+          # 1 GB = 1073741824 B
+          gc-max-store-size-linux: 1073741824
+          # do purge caches
+          purge: true
+          # purge all versions of the cache
+          purge-prefixes: nix-${{ runner.os }}-
+          # created more than this number of seconds ago relative to the start of the `Post Restore` phase
+          purge-created: 0
+          # except the version with the `primary-key`, if it exists
+          purge-primary-key: never
+
+      - run: nix build .
       - name: Run script
         id: run-script
         run: |
           trap 'echo "exitCode=$?" | tee -a $GITHUB_OUTPUT' EXIT
           if [ "$(date +%H)" = $HOT_HOUR ]; then
             # Post any outcome once a day
-            python gnd_gender.py --post any
+            ./result/bin/gnd-gender --post any
           else
             # Post positive outcome only at all other times
-            python gnd_gender.py --post positive
+            ./result/bin/gnd-gender --post positive
           fi
       - name: Disable workflow on exit code 99 (changes detected)
         if: steps.run-script.outputs.exitCode == '99'
