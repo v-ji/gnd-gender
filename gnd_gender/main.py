@@ -4,7 +4,8 @@ import logging
 import random
 import sys
 from codecs import decode
-from os import environ
+from importlib import resources
+from os import environ, path
 from typing import Optional, Set, TypedDict
 
 import requests
@@ -89,7 +90,10 @@ def check_gender_concepts() -> GenderConceptsResult:
 
 
 def get_random_phrase(forbid=set()) -> str:
-    with open("phrases.json", "r", encoding="utf-8") as f:
+    script_dir = path.dirname(path.abspath(__file__))
+    phrases_path = path.join(script_dir, "phrases.json")
+
+    with open(phrases_path, "r", encoding="utf-8") as f:
         phrases = json.loads(decode(f.read(), "\u0072\u006f\u0074\u0031\u0033"))
 
     # Pick a phrase pool based on weights in the JSON keys
