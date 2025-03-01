@@ -11,7 +11,7 @@ env:
 jobs:
   post-job:
     name: Main Job
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     env:
       ATPROTO_HANDLE: ${{ secrets.ATPROTO_HANDLE }}
       ATPROTO_PASSWORD: ${{ secrets.ATPROTO_PASSWORD }}
