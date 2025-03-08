@@ -27,12 +27,16 @@ def create_parser():
         description="Check GND gender vocabulary and post to Bluesky"
     )
     parser.add_argument(
-        "--post",
-        choices=["any", "positive", "negative"],
+        "--filter",
+        choices=["positive", "negative"],
+        default=["positive", "negative"],
+        nargs="*",
         help=(
-            "Specify when to post: Only on positive outcome (changes detected), only on negative outcome (no changes detected), or on any outcome"
+            """
+            Filter outcomes to post on: positive (changes detected) or negative (no changes detected)
+            (default: Post on both positive and negative outcomes)
+            """
         ),
-        required=True,
     )
     parser.add_argument(
         "--dry-run",
@@ -123,15 +127,9 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
 
-    # Set variables based on --post choice
-    post_positive = post_negative = False
-
-    if args.post == "any":
-        post_positive = post_negative = True
-    elif args.post == "positive":
-        post_positive = True
-    elif args.post == "negative":
-        post_negative = True
+    # Set variables based on --filter choice
+    post_positive = "positive" in args.filter
+    post_negative = "negative" in args.filter
 
     client = None
     recent_posts: Set[str] = set()

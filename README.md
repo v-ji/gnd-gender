@@ -49,19 +49,19 @@ To authenticate with Bluesky and enable posting, set the following environment v
 ## Usage
 
 ```
-usage: gnd-gender [-h] --post {any,positive,negative} [--dry-run]
+usage: main.py [-h] [--filter [{positive,negative} ...]] [--dry-run]
 
 Check GND gender vocabulary and post to Bluesky
 
 options:
   -h, --help            show this help message and exit
-  --post {any,positive,negative}
-                        Specify when to post: Only on positive outcome
-                        (changes detected), only on negative outcome (no
-                        changes detected), or on any outcome
+  --filter [{positive,negative} ...]
+                        Filter outcomes to post on: positive (changes
+                        detected) or negative (no changes detected) (default:
+                        Post on both positive and negative outcomes)
   --dry-run             Do not authenticate with ATProto and do not post
 ```
 
-The `--post` option allows the bot to check for changes every hour without flooding the feed with “No.” posts. It posts any updates once a day with `--post any` and only positive updates hourly with `--post positive`.
+The `--filter` option allows the bot to check for changes every hour without flooding the feed with “No.” posts. It posts any updates once a day without filter and only positive updates hourly with `--filter positive`.
 
 The script exits with code `0` if no changes are detected, and with code `99` if new concepts are found.
