@@ -43,13 +43,10 @@ jobs:
         id: run-script
         run: |
           trap 'echo "exitCode=$?" | tee -a $GITHUB_OUTPUT' EXIT
-          if [ "$(date +%H)" = $HOT_HOUR ]; then
-            # Post any outcome once a day
-            ./result/bin/gnd-gender --post any
-          else
-            # Post positive outcome only at all other times
-            ./result/bin/gnd-gender --post positive
-          fi
+          # Post any outcome once a day, but positive outcome only at all other times
+          filter_opt=$([ "$(date +%H)" = "$HOT_HOUR" ] && echo "" || echo "--filter positive")
+          ./result/bin/gnd-gender $filter_opt
+
       - name: Disable workflow on exit code 99 (changes detected)
         if: steps.run-script.outputs.exitCode == '99'
         run: gh workflow disable "$GITHUB_WORKFLOW"
