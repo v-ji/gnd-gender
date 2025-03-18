@@ -21,6 +21,7 @@
         ps: with ps; [
           atproto
           lxml
+          mastodon-py
           requests
         ];
     in

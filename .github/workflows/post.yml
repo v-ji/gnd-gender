@@ -15,6 +15,10 @@ jobs:
     env:
       ATPROTO_HANDLE: ${{ secrets.ATPROTO_HANDLE }}
       ATPROTO_PASSWORD: ${{ secrets.ATPROTO_PASSWORD }}
+      MASTODON_API_BASE_URL: ${{ secrets.MASTODON_API_BASE_URL }}
+      MASTODON_CLIENT_ID: ${{ secrets.MASTODON_CLIENT_ID }}
+      MASTODON_CLIENT_SECRET: ${{ secrets.MASTODON_CLIENT_SECRET }}
+      MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
     permissions:
       actions: write # Required to disable the workflow
     steps:
@@ -45,7 +49,7 @@ jobs:
           trap 'echo "exitCode=$?" | tee -a $GITHUB_OUTPUT' EXIT
           # Post any outcome once a day, but positive outcome only at all other times
           filter_opt=$([ "$(date +%H)" = "$HOT_HOUR" ] && echo "" || echo "--filter positive")
-          ./result/bin/gnd-gender $filter_opt
+          ./result/bin/gnd-gender --platform bluesky mastodon $filter_opt
 
       - name: Disable workflow on exit code 99 (changes detected)
         if: steps.run-script.outputs.exitCode == '99'

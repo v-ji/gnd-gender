@@ -4,18 +4,24 @@ import logging
 import random
 import sys
 from codecs import decode
-from importlib import resources
+from enum import Enum
 from os import environ, path
-from typing import Optional, Set, TypedDict
+from typing import Optional, Set, TypedDict, Union, cast
 
 import requests
 from atproto import Client
-from atproto_client.utils import TextBuilder
 from lxml import etree
+from mastodon import Mastodon
 
 # Constants
 GENDER_VOCAB_URL = "https://d-nb.info/standards/vocab/gnd/gender"
 EXIT_CODE_CHANGES_DETECTED = 99
+
+
+class Platform(Enum):
+    BLUESKY = "bluesky"
+    MASTODON = "mastodon"
+
 
 logging.basicConfig(format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -24,7 +30,14 @@ logger.setLevel(logging.INFO)
 
 def create_parser():
     parser = argparse.ArgumentParser(
-        description="Check GND gender vocabulary and post to Bluesky"
+        description="Check GND gender vocabulary and post to Bluesky and/or Mastodon"
+    )
+    parser.add_argument(
+        "--platform",
+        choices=[p.value for p in Platform],
+        default=None,
+        nargs="*",
+        help="Specify the platform to post to: Bluesky, Mastodon (default: %(default)s)",
     )
     parser.add_argument(
         "--filter",
@@ -41,7 +54,7 @@ def create_parser():
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Do not authenticate with ATProto and do not post",
+        help="Only authenticate and fetch data, but do not post. Useful for testing authentication",
     )
     return parser
 
@@ -53,6 +66,75 @@ def create_session() -> requests.Session:
     session = requests.Session()
     session.headers.update({"User-Agent": user_agent})
     return session
+
+
+def get_required_env_vars(platform: Platform) -> dict[str, str]:
+    """
+    Get all required environment variables for a specific platform.
+    Exits the program if any required variable is missing.
+    """
+    required_vars = {
+        Platform.BLUESKY: ["ATPROTO_HANDLE", "ATPROTO_PASSWORD"],
+        Platform.MASTODON: [
+            "MASTODON_API_BASE_URL",
+            "MASTODON_CLIENT_ID",
+            "MASTODON_CLIENT_SECRET",
+            "MASTODON_ACCESS_TOKEN",
+        ],
+    }
+
+    result = {}
+    platform_vars = required_vars.get(platform, [])
+
+    for var_name in platform_vars:
+        value = environ.get(var_name)
+        if not value:
+            logger.error(
+                f"Required environment variable {var_name} for {platform.value} is not set. Exiting."
+            )
+            sys.exit(1)
+        result[var_name] = value
+
+    return result
+
+
+def setup_platform_clients(
+    platforms: list[Platform],
+) -> dict[Platform, Union[Client, Mastodon]]:
+    """
+    Setup clients for each requested platform with proper validation of environment variables.
+    Returns a dictionary of clients keyed by Platform enum.
+    """
+    clients = {}
+
+    for platform in platforms:
+        env_vars = get_required_env_vars(platform)
+        logger.info(f"({platform.value}) Performing login...")
+
+        if platform == Platform.BLUESKY:
+            client = Client()
+            profile = client.login(
+                env_vars["ATPROTO_HANDLE"], env_vars["ATPROTO_PASSWORD"]
+            )
+            clients[platform] = client
+            logger.info(
+                f"({platform.value}) Logged in as: '{profile.display_name}' ({profile.handle})"
+            )
+
+        elif platform == Platform.MASTODON:
+            client = Mastodon(
+                api_base_url=env_vars["MASTODON_API_BASE_URL"],
+                client_id=env_vars["MASTODON_CLIENT_ID"],
+                client_secret=env_vars["MASTODON_CLIENT_SECRET"],
+                access_token=env_vars["MASTODON_ACCESS_TOKEN"],
+            )
+            clients[platform] = client
+            profile = client.me()
+            logger.info(
+                f"({platform.value}) Logged in as: '{profile.display_name}' (@{profile.acct})"
+            )
+
+    return clients
 
 
 class GenderConceptsResult(TypedDict):
@@ -114,13 +196,44 @@ def get_random_phrase(forbid=set()) -> str:
     return phrase
 
 
-def print_and_post(text: str | TextBuilder, client: Client | None):
-    # Get string representation for TextBuilder
-    text_str = text if type(text) is not TextBuilder else text.build_text()
+def get_recent_posts(clients: dict[Platform, Union[Client, Mastodon]]) -> set[str]:
+    # Get recent posts so we can exclude them from the random phrase pool (if Bluesky is available)
+    recent_posts: Set[str] = set()
+    if Platform.BLUESKY in clients:
+        atproto_client = cast(Client, clients[Platform.BLUESKY])
 
-    logger.info(f"{'Posting:' if client else 'Dry run, would post:'} '{text_str}'")
-    if client:
-        client.send_post(text, langs=["en"])
+        recent_limit = 3
+        atproto_handle = environ.get("ATPROTO_HANDLE")
+        if not atproto_handle:
+            raise ValueError("ATPROTO_HANDLE environment variable is not set.")
+
+        profile_feed = atproto_client.get_author_feed(
+            atproto_handle, filter="posts_no_replies", limit=recent_limit
+        )
+        recent_posts = set(
+            map(lambda x: x.post.record.text, profile_feed.feed)  # type: ignore / Types are incomplete
+        )
+    return recent_posts
+
+
+def print_and_post(
+    text: str, clients: dict[Platform, Union[Client, Mastodon]], dry_run=False
+):
+    logger.info(f"Verdict: '{text}'")
+    if dry_run:
+        logger.info("Dry run enabled. Skipping post.")
+        return
+
+    for platform, client in clients.items():
+        if platform == Platform.BLUESKY:
+            atproto_client = cast(Client, client)
+            atproto_client.send_post(text, langs=["en"])
+
+        elif platform == Platform.MASTODON:
+            mastodon_client = cast(Mastodon, client)
+            mastodon_client.status_post(text, language="en")
+
+        logger.info(f"({platform.value}) Post sent.")
 
 
 def main():
@@ -131,37 +244,8 @@ def main():
     post_positive = "positive" in args.filter
     post_negative = "negative" in args.filter
 
-    client = None
-    recent_posts: Set[str] = set()
-    if not args.dry_run:
-        logger.info("Performing ATProto login...")
-        client = Client()
-        # Check environment variables for login credentials
-        atproto_handle, atproto_password = (
-            environ.get("ATPROTO_HANDLE"),
-            environ.get("ATPROTO_PASSWORD"),
-        )
-        if not atproto_handle:
-            logger.error("Environment variable ATPROTO_HANDLE is not set. Exiting.")
-            sys.exit(1)
-        if not atproto_password:
-            logger.error("Environment variable ATPROTO_PASSWORD is not set. Exiting.")
-            sys.exit(1)
-
-        profile = client.login(atproto_handle, atproto_password)
-        logger.info(f"Logged in as: '{profile.display_name}'")
-
-        # Get recent posts so we can exclude them from the random phrase pool
-        recent_limit = 3
-        profile_feed = client.get_author_feed(
-            atproto_handle, filter="posts_no_replies", limit=recent_limit
-        )
-        recent_posts = set(
-            map(lambda x: x.post.record.text, profile_feed.feed)  # type: ignore / Types are incomplete
-        )
-
-    else:
-        logger.info("Dry run, skipping ATProto login.")
+    # Convert platform strings from args to Platform enum values
+    platforms = [Platform(p) for p in args.platform] if args.platform else []
 
     logger.info("Fetching GND gender information...")
     gender_concepts = check_gender_concepts()
@@ -171,11 +255,15 @@ def main():
     )
     has_changes = bool(added_concepts) or bool(removed_concepts)
 
+    # Setup clients for selected platforms
+    clients = setup_platform_clients(platforms)
+
+    phrase = ""
     if not has_changes:
         logger.info("Found no concept changes.")
         if post_negative:
+            recent_posts = get_recent_posts(clients)
             phrase = get_random_phrase(forbid=recent_posts)
-            print_and_post(phrase, client)
     else:
         # IT’S HAPPENING
         if added_concepts:
@@ -189,10 +277,14 @@ def main():
 
         if post_positive:
             url = gender_concepts["version_iri"] or GENDER_VOCAB_URL
-            text = f"Maybe? {url}"
-            print_and_post(text, client)
+            phrase = f"Maybe? {url}"
 
-        # Exit with error code so GitHub Actions sends a notification
+    if platforms and (
+        (has_changes and post_positive) or (not has_changes and post_negative)
+    ):
+        print_and_post(phrase, clients, dry_run=args.dry_run)
+
+    if has_changes:
         sys.exit(EXIT_CODE_CHANGES_DETECTED)
 
 
