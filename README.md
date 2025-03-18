@@ -1,6 +1,7 @@
 # GND, are we gender yet?
 
-Bluesky bot to monitor the German National Library’s [GND gender vocabulary](https://d-nb.info/standards/vocab/gnd/gender.html) and check whether any new concepts have been added.
+A bot to monitor the German National Library’s [GND gender vocabulary](https://d-nb.info/standards/vocab/gnd/gender.html) and check whether any new concepts have been added.
+Can post updates to Bluesky and Mastodon.
 
 ## Why?
 
@@ -11,7 +12,7 @@ This bot runs daily and checks for any additions to this vocabulary.
 
 - Fetches the GND gender vocabulary RDF file
 - Checks for any concepts beyond female, male, and “not known”
-- Posts result to Bluesky
+- Posts result to Bluesky and/or Mastodon
 - Runs daily via GitHub Actions
 
 ## Installation
@@ -43,25 +44,45 @@ gnd-gender --help
 
 To authenticate with Bluesky and enable posting, set the following environment variables:
 
+### Bluesky
+
 - `ATPROTO_HANDLE`: Bluesky handle
 - `ATPROTO_PASSWORD`: Bluesky [app password](https://bsky.app/settings/app-passwords)
+
+### Mastodon
+
+- `MASTODON_API_BASE_URL`: Base URL of your Mastodon instance
+- `MASTODON_CLIENT_ID`: Mastodon client ID
+- `MASTODON_CLIENT_SECRET`: Mastodon client secret
+- `MASTODON_ACCESS_TOKEN`: Mastodon access token
 
 ## Usage
 
 ```
-usage: main.py [-h] [--filter [{positive,negative} ...]] [--dry-run]
+usage: gnd-gender [-h] [--platform [{bluesky,mastodon} ...]]
+                  [--filter [{positive,negative} ...]] [--dry-run]
 
-Check GND gender vocabulary and post to Bluesky
+Check GND gender vocabulary and post to Bluesky and/or Mastodon
 
 options:
   -h, --help            show this help message and exit
+  --platform [{bluesky,mastodon} ...]
+                        Specify the platform to post to: Bluesky, Mastodon
+                        (default: None)
   --filter [{positive,negative} ...]
                         Filter outcomes to post on: positive (changes
                         detected) or negative (no changes detected) (default:
                         Post on both positive and negative outcomes)
-  --dry-run             Do not authenticate with ATProto and do not post
+  --dry-run             Only authenticate and fetch data, but do not post.
+                        Useful for testing authentication
 ```
 
-The `--filter` option allows the bot to check for changes every hour without flooding the feed with “No.” posts. It posts any updates once a day without filter and only positive updates hourly with `--filter positive`.
+### Notes
+
+Use `--platform` to specify whether to post to Bluesky, Mastodon, both or none.
+Specifying no platform can be useful if you only want to check for changes without posting.
+
+The `--filter` option allows the bot to check for changes every hour without flooding the feed with “No.” posts.
+It posts any updates once a day without filter and only positive updates hourly with `--filter positive`.
 
 The script exits with code `0` if no changes are detected, and with code `99` if new concepts are found.
