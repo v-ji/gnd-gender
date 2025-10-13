@@ -12,6 +12,8 @@ import requests
 from atproto import Client
 from lxml import etree
 from mastodon import Mastodon
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Constants
 GENDER_VOCAB_URL = "https://d-nb.info/standards/vocab/gnd/gender"
@@ -65,6 +67,18 @@ def create_session() -> requests.Session:
     user_agent = f"gnd-gender/{version} (bot; https://github.com/v-ji/gnd-gender) {requests.utils.default_user_agent()}"
     session = requests.Session()
     session.headers.update({"User-Agent": user_agent})
+
+    # Add a retry strategy to handle intermittent network errors
+    retry_strategy = Retry(
+        total=5,
+        backoff_factor=2,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"],
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
     return session
 
 
