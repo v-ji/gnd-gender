@@ -68,6 +68,11 @@
               default = 11;
               description = "Hour at which to post any outcome (no --filter).";
             };
+            timezone = lib.mkOption {
+              type = lib.types.str;
+              default = "UTC";
+              description = "Time zone for the timers (e.g. 'UTC' or 'Europe/Berlin').";
+            };
             environmentFile = lib.mkOption {
               type = lib.types.nullOr lib.types.path;
               default = null;
@@ -100,7 +105,7 @@
                 wantedBy = [ "timers.target" ];
                 timerConfig = {
                   Unit = "gnd-gender@hot.service";
-                  OnCalendar = "${toString cfg.hotHour}:05";
+                  OnCalendar = "${toString cfg.hotHour}:05 ${cfg.timezone}";
                   RandomizedDelaySec = 600;
                   AccuracySec = 1;
                   Persistent = true;
@@ -112,7 +117,7 @@
                 wantedBy = [ "timers.target" ];
                 timerConfig = {
                   Unit = "gnd-gender@filtered.service";
-                  OnCalendar = "${lib.concatMapStringsSep "," toString otherHours}:05";
+                  OnCalendar = "${lib.concatMapStringsSep "," toString otherHours}:05 ${cfg.timezone}";
                   RandomizedDelaySec = 600;
                   AccuracySec = 1;
                   Persistent = true;
